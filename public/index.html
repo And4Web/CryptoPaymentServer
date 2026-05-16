@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Native Crypto Payment Gateway</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; background: #121212; color: #fff; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .checkout-box { background: #1e1e1e; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); width: 350px; text-align: center; }
+        select, input, button { width: 100%; padding: 12px; margin: 10px 0; border-radius: 6px; border: none; font-size: 16px; box-sizing: border-box; }
+        select, input { background: #2d2d2d; color: #fff; }
+        button { background: #00e676; color: #000; font-weight: bold; cursor: pointer; }
+        button:hover { background: #00c853; }
+        
+        /* Modal Dialogue Styling */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); justify-content: center; align-items: center; }
+        .modal-content { background: #222; padding: 30px; border-radius: 12px; text-align: center; width: 320px; border: 1px solid #333; position: relative; }
+        .qr-frame { margin: 20px auto; background: white; padding: 10px; display: inline-block; border-radius: 8px; }
+        .qr-frame img { display: block; width: 200px; height: 200px; }
+        .address-text { word-break: break-all; background: #111; padding: 10px; border-radius: 6px; font-size: 12px; color: #00e676; font-family: monospace; }
+        .status-spinner { margin-top: 15px; color: #aaa; font-style: italic; }
+        .close-btn { position: absolute; top: 10px; right: 15px; font-size: 20px; cursor: pointer; color: #888; }
+    </style>
+</head>
+<body>
+
+    <div class="checkout-box">
+        <h2>App Checkout</h2>
+        <label>Select Crypto Asset:</label>
+        <select id="cryptoAsset">
+            <option value="btc">Bitcoin (BTC)</option>
+            <option value="eth">Ethereum (ETH)</option>
+            <option value="ltc">Litecoin (LTC)</option>
+            <option value="xmr">Monero (XMR)</option>
+        </select>
+
+        <label>Payment Amount:</label>
+        <input type="number" id="payAmount" value="0.01" step="0.0001">
+
+        <button onclick="openPaymentDialogue()">Pay with Crypto</button>
+    </div>
+
+    <!-- Payment Dialogue Box Modal -->
+    <div id="paymentModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeModal()">&times;</span>
+            <h3 id="modalTitle">Send Payment</h3>
+            <p>Scan QR code or copy address below:</p>
+            
+            <div class="qr-frame">
+                <img id="qrElement" src="" alt="Crypto QR Code">
+            </div>
+
+            <div id="addressElement" class="address-text">Generating...</div>
+            <div id="statusElement" class="status-spinner">Awaiting network transaction...</div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let currentInvoiceId = null;
+
+        async function openPaymentDialogue() {
+            const currency = document.getElementById('cryptoAsset').value;
+            const amount = document.getElementById('payAmount').value;
+
+            // Trigger server backend to establish tracking and fetch data
+            const response = await fetch('/api/create-charge', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ currency, amount })
+            });
+            const data = await response.json();
+
+            if(data.error) return alert(data.error);
+
+            currentInvoiceId = data.invoiceId;
+
+            // Update UI elements inside dialogue box
+            document.getElementById('modalTitle').innerText = `Pay ${data.amount} ${data.currency}`;
+            document.getElementById('qrElement').src = data.qrCode;
+            document.getElementById('addressElement').innerText = data.address;
+            document.getElementById('statusElement').innerHTML = "⏳ Awaiting network transaction...";
+            document.getElementById('statusElement').style.color = "#aaa";
+
+            // Reveal the dialogue box on screen
+            document.getElementById('paymentModal').style.display = 'flex';
+
+            // Establish instant WebSocket listener for this specific invoice ID
+            socket.on(`payment_confirmed_${currentInvoiceId}`, (msg) => {
+                if(msg.status === 'confirmed') {
+                    document.getElementById('statusElement').innerHTML = "✅ Payment Confirmed Successfully!";
+                    document.getElementById('statusElement').style.color = "#00e676";
+                }
+            });
+        }
+
+        function closeModal() {
+            document.getElementById('paymentModal').style.display = 'none';
+            if (currentInvoiceId) {
+                socket.off(`payment_confirmed_${currentInvoiceId}`);
+            }
+        }
+    </script>
+</body>
+</html>
