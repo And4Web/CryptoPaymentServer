@@ -3,6 +3,8 @@ const http = require('http');
 const { Server } = require('socket.io');
 const QRCode = require('qrcode');
 const path = require('path');
+const dotenv = require("dotenv");
+dotenv.config();
 
 // 1. Import Official Bitcoin Cryptography Engines
 const bitcoin = require('bitcoinjs-lib');
@@ -79,5 +81,5 @@ function monitorBlockchain(invoiceId, currency, address, amount) {
     }, 8000);
 }
 
-const PORT = 3000;
+const PORT = 3000 || process.env.PORT;
 server.listen(PORT, () => console.log(`Crypto Server active on http://localhost:${PORT}`));
